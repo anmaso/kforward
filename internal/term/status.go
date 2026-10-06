@@ -28,8 +28,8 @@ func StatusBadge(up bool) string {
 	}
 
 	if up {
-		// Green background, dark text
-		return fmt.Sprintf("\033[42;30;1m[ up ]%s", reset)
+		// Bright green foreground
+		return fmt.Sprintf("\033[1;92m[ up ]%s", reset)
 	}
 	// Bright red foreground — unmistakably red across terminals
 	return fmt.Sprintf("\033[1;91m[ down ]%s", reset)

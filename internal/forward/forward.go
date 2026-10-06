@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/amarin/kforward/internal/discovery"
 	"github.com/amarin/kforward/internal/state"
@@ -41,12 +42,15 @@ func ParseMapping(raw string) (Mapping, error) {
 	return Mapping{Local: local, Remote: int32(remote)}, nil
 }
 
-func Start(target discovery.Target, mapping Mapping) (*state.Forward, error) {
+func Start(target discovery.Target, mapping Mapping, kubeContext string) (*state.Forward, error) {
 	args := []string{
 		"port-forward",
 		resourceRef(target),
 		fmt.Sprintf("%d:%d", mapping.Local, mapping.Remote),
 		"-n", target.Namespace,
+	}
+	if kubeContext != "" {
+		args = append(args, "--context", kubeContext)
 	}
 
 	cmd := exec.Command("kubectl", args...)
@@ -59,7 +63,11 @@ func Start(target discovery.Target, mapping Mapping) (*state.Forward, error) {
 		return nil, fmt.Errorf("start kubectl port-forward: %w", err)
 	}
 
-	path, err := state.WritePID(target.Namespace, target.Name, mapping.Local, int(mapping.Remote), cmd.Process.Pid)
+	// Reap the child if it exits while we are still running (e.g. in the
+	// interactive status view); a zombie would still look alive to IsRunning.
+	go func() { _ = cmd.Wait() }()
+
+	path, err := state.WritePID(target.Namespace, target.Name, mapping.Local, int(mapping.Remote), cmd.Process.Pid, kubeContext)
 	if err != nil {
 		_ = cmd.Process.Kill()
 		return nil, err
@@ -71,6 +79,7 @@ func Start(target discovery.Target, mapping Mapping) (*state.Forward, error) {
 		LocalPort:  mapping.Local,
 		RemotePort: int(mapping.Remote),
 		PID:        cmd.Process.Pid,
+		Context:    kubeContext,
 		FileName:   state.FileName(target.Namespace, target.Name, mapping.Local, int(mapping.Remote)),
 		FilePath:   path,
 	}, nil
@@ -86,6 +95,26 @@ func Stop(f state.Forward) error {
 		return err
 	}
 	return nil
+}
+
+// Pause terminates the process but keeps the record, so the forward is listed
+// as down and can be started again.
+func Pause(f state.Forward) error {
+	process, err := os.FindProcess(f.PID)
+	if err != nil {
+		return err
+	}
+	if err := process.Signal(syscall.SIGTERM); err != nil {
+		return fmt.Errorf("stop pid %d: %w", f.PID, err)
+	}
+
+	for i := 0; i < 20; i++ {
+		if !IsRunning(f.PID) {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("pid %d did not exit after SIGTERM", f.PID)
 }
 
 func resourceRef(target discovery.Target) string {

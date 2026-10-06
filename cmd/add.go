@@ -41,7 +41,7 @@ func init() {
 }
 
 func runAdd(ctx context.Context, args []string, interactive bool) error {
-	client, err := discovery.NewClient()
+	client, err := discovery.NewClient("")
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func runAdd(ctx context.Context, args []string, interactive bool) error {
 		return err
 	}
 
-	created, err := forward.Start(target, mapping)
+	created, err := forward.Start(target, mapping, client.Context())
 	if err != nil {
 		return err
 	}

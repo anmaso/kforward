@@ -40,11 +40,11 @@ The name is matched against services and deployments, first in the current names
 
 ### `kforward status`
 
-List all tracked forwards with their state (`up`/`down`), namespace, name, ports and PID. If any are down, you are offered the choice to recreate one or all of them.
+List all tracked forwards with their state (`up`/`down`), namespace, name, ports and PID. With `-i` the list becomes interactive: move with the arrow keys, press `enter` to toggle the selected forward between up (stops it) and down (starts it again), `d` to delete it after a confirmation, `a` to add a new forward (same as `add -i`), `c` to switch kubectl's current context, and `q` to quit.
 
 ```bash
-kforward status
-kforward status --no-recreate   # list only, no recreate prompt
+kforward status      # list only
+kforward status -i   # select a row: enter toggles up/down, d deletes, a adds, c switches context
 ```
 
 ### `kforward remove`
@@ -59,7 +59,7 @@ Each forward is a detached `kubectl port-forward` process (own session, so it su
 ~/.config/kforward/port-forwards/
 ```
 
-`status` checks whether each recorded PID is still alive; recreating a forward re-resolves the target in the cluster and starts a fresh process on the same ports.
+`status` checks whether each recorded PID is still alive; the file also stores the kubectl context the forward was created with. Toggling a forward back up re-resolves the target in that context (not the current one) and starts a fresh process on the same ports. Records created before contexts were tracked show `-` and take the current context the next time they are started.
 
 ## Project layout
 
@@ -70,6 +70,7 @@ internal/discovery/     cluster lookups for services and deployments
 internal/forward/       starting, stopping and inspecting port-forward processes
 internal/selector/      interactive prompts (huh)
 internal/state/         PID-file bookkeeping
+internal/tui/           interactive status view (bubbletea)
 internal/config/        config paths
 internal/term/          status badge rendering
 ```

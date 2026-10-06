@@ -15,7 +15,7 @@ func runMenu(ctx context.Context) error {
 
 	switch action {
 	case selector.ActionStatus:
-		return runStatus(ctx, false)
+		return runStatus(ctx, true)
 	case selector.ActionAdd:
 		return runAdd(ctx, nil, true)
 	case selector.ActionRemove:

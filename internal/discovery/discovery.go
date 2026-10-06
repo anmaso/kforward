@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -49,13 +50,16 @@ func (t Target) Label() string {
 }
 
 type Client struct {
-	clientset *kubernetes.Clientset
-	namespace string
+	clientset   *kubernetes.Clientset
+	namespace   string
+	kubeContext string
 }
 
-func NewClient() (*Client, error) {
+// NewClient connects using the given kubeconfig context, or the current one
+// when kubeContext is empty.
+func NewClient(kubeContext string) (*Client, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	configOverrides := &clientcmd.ConfigOverrides{}
+	configOverrides := &clientcmd.ConfigOverrides{CurrentContext: kubeContext}
 	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
 
 	config, err := kubeConfig.ClientConfig()
@@ -76,7 +80,53 @@ func NewClient() (*Client, error) {
 		namespace = "default"
 	}
 
-	return &Client{clientset: clientset, namespace: namespace}, nil
+	if kubeContext == "" {
+		kubeContext, _ = CurrentContext()
+	}
+
+	return &Client{clientset: clientset, namespace: namespace, kubeContext: kubeContext}, nil
+}
+
+// Context is the kubeconfig context this client talks to.
+func (c *Client) Context() string {
+	return c.kubeContext
+}
+
+// Contexts lists the kubeconfig context names (sorted) and the current one.
+func Contexts() (names []string, current string, err error) {
+	cfg, err := clientcmd.NewDefaultClientConfigLoadingRules().Load()
+	if err != nil {
+		return nil, "", fmt.Errorf("load kubeconfig: %w", err)
+	}
+	for name := range cfg.Contexts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, cfg.CurrentContext, nil
+}
+
+// CurrentContext returns the kubeconfig's current context name.
+func CurrentContext() (string, error) {
+	_, current, err := Contexts()
+	return current, err
+}
+
+// UseContext makes name the kubeconfig's current context, like
+// `kubectl config use-context`.
+func UseContext(name string) error {
+	pathOptions := clientcmd.NewDefaultPathOptions()
+	cfg, err := pathOptions.GetStartingConfig()
+	if err != nil {
+		return fmt.Errorf("load kubeconfig: %w", err)
+	}
+	if _, ok := cfg.Contexts[name]; !ok {
+		return fmt.Errorf("no context named %q", name)
+	}
+	cfg.CurrentContext = name
+	if err := clientcmd.ModifyConfig(pathOptions, *cfg, true); err != nil {
+		return fmt.Errorf("save kubeconfig: %w", err)
+	}
+	return nil
 }
 
 func (c *Client) CurrentNamespace() string {

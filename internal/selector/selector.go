@@ -6,14 +6,8 @@ import (
 
 	"github.com/amarin/kforward/internal/discovery"
 	"github.com/amarin/kforward/internal/forward"
-	"github.com/amarin/kforward/internal/state"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
-)
-
-const (
-	RecreateAll  = "__all__"
-	RecreateSkip = "__skip__"
 )
 
 // newForm builds a form that can be aborted with Esc as well as Ctrl+C.
@@ -179,42 +173,6 @@ func ConfirmKillProcess(u *forward.PortUser, port int) (bool, error) {
 	return confirmed, nil
 }
 
-func ChooseRecreateForwards(down []state.Forward) (string, error) {
-	if len(down) == 0 {
-		return "", fmt.Errorf("no down port forwards to recreate")
-	}
-
-	options := make([]huh.Option[string], 0, len(down)+2)
-	options = append(options, huh.NewOption("ALL (recreate all down forwards)", RecreateAll))
-	options = append(options, huh.NewOption("Skip (do not recreate)", RecreateSkip))
-	nsW, nameW := len("NAMESPACE"), len("NAME")
-	for _, f := range down {
-		nsW = max(nsW, len(f.Namespace))
-		nameW = max(nameW, len(f.Name))
-	}
-	for _, f := range down {
-		label := fmt.Sprintf("%-*s  %-*s  %-5d  %d", nsW, f.Namespace, nameW, f.Name, f.LocalPort, f.RemotePort)
-		options = append(options, huh.NewOption(label, f.FilePath))
-	}
-	header := fmt.Sprintf("  %-*s  %-*s  %-5s  %s", nsW, "NAMESPACE", nameW, "NAME", "LOCAL", "REMOTE")
-
-	var selected string
-	form := newForm(
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Recreate port forward").
-				Description("Some port forwards are down. Choose ALL, Skip, or one forward.\n\n" + header).
-				Options(options...).
-				Value(&selected),
-		),
-	)
-
-	if err := form.Run(); err != nil {
-		return "", fmt.Errorf("selection cancelled: %w", err)
-	}
-	return selected, nil
-}
-
 func ChooseForward(forwards []string) (string, error) {
 	if len(forwards) == 0 {
 		return "", fmt.Errorf("no port forwards to choose from")
@@ -264,6 +222,37 @@ func ChooseAction() (string, error) {
 					huh.NewOption("add     - create a new port forward (interactive)", ActionAdd),
 					huh.NewOption("remove  - stop an existing port forward", ActionRemove),
 				).
+				Value(&selected),
+		),
+	)
+	if err := form.Run(); err != nil {
+		return "", fmt.Errorf("selection cancelled: %w", err)
+	}
+	return selected, nil
+}
+
+func ChooseContext(names []string, current string) (string, error) {
+	if len(names) == 0 {
+		return "", fmt.Errorf("no kubectl contexts found")
+	}
+
+	options := make([]huh.Option[string], len(names))
+	for i, n := range names {
+		label := n
+		if n == current {
+			label += "  (current)"
+		}
+		options[i] = huh.NewOption(label, n)
+	}
+
+	selected := current
+	form := newForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Select kubectl context").
+				Description("Type to filter. Use arrow keys and Enter.").
+				Options(options...).
+				Filtering(true).
 				Value(&selected),
 		),
 	)

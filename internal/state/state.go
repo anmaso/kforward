@@ -16,6 +16,7 @@ type Forward struct {
 	LocalPort  int
 	RemotePort int
 	PID        int
+	Context    string // kubeconfig context the forward was created with; empty for legacy records
 	FileName   string
 	FilePath   string
 }
@@ -47,7 +48,7 @@ func ParseFileName(fileName string) (namespace, name string, localPort, remotePo
 	return parts[0], parts[1], localPort, remotePort, nil
 }
 
-func WritePID(namespace, name string, localPort, remotePort, pid int) (string, error) {
+func WritePID(namespace, name string, localPort, remotePort, pid int, kubeContext string) (string, error) {
 	dir, err := config.EnsurePortForwardsDir()
 	if err != nil {
 		return "", err
@@ -56,7 +57,7 @@ func WritePID(namespace, name string, localPort, remotePort, pid int) (string, e
 	fileName := FileName(namespace, name, localPort, remotePort)
 	path := filepath.Join(dir, fileName)
 
-	if err := os.WriteFile(path, []byte(strconv.Itoa(pid)), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(strconv.Itoa(pid)+"\n"+kubeContext+"\n"), 0o644); err != nil {
 		return "", fmt.Errorf("write pid file: %w", err)
 	}
 	return path, nil
@@ -90,9 +91,16 @@ func ListForwards() ([]Forward, error) {
 			continue
 		}
 
-		pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+		// First line is the PID; an optional second line is the kube context.
+		lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+		pid, err := strconv.Atoi(strings.TrimSpace(lines[0]))
 		if err != nil {
 			continue
+		}
+
+		var kubeContext string
+		if len(lines) > 1 {
+			kubeContext = strings.TrimSpace(lines[1])
 		}
 
 		forwards = append(forwards, Forward{
@@ -101,6 +109,7 @@ func ListForwards() ([]Forward, error) {
 			LocalPort:  localPort,
 			RemotePort: remotePort,
 			PID:        pid,
+			Context:    kubeContext,
 			FileName:   entry.Name(),
 			FilePath:   path,
 		})
