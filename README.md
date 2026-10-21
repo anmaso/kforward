@@ -19,7 +19,14 @@ Move the resulting `kforward` binary somewhere on your `PATH`.
 
 ## Usage
 
-Running `kforward` with no arguments prints help and opens an interactive menu (status / add / remove).
+Running `kforward` with no arguments prints the status of your forwards, then the help text, and exits. It never waits for input.
+
+Running `kforward -i` (with no command) opens an interactive menu to choose a command (status / add / remove).
+
+```bash
+kforward      # status, then help
+kforward -i   # interactive menu
+```
 
 ### `kforward add [name] [local:remote]`
 
